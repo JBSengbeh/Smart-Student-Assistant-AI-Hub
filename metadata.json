@@ -1,0 +1,6 @@
+{
+  "name": "Smart Student Assistant",
+  "description": "An all-in-one academic command center for university and high school students to manage assignments, exams, notes, scholarships, and schedules, featuring AI topic simplifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
