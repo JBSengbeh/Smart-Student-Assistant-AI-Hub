@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm install && npm run build
-    startCommand: tsx server.ts
+    startCommand: ./node_modules/.bin/tsx server.ts
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
