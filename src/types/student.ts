@@ -10,6 +10,8 @@ export interface StudentProfile {
   currentGpa: number;
   streakDays: number;
   isPro: boolean;
+  proSource?: 'none' | 'stripe' | 'flutterwave' | 'campus';
+  campusDomain?: string;
   partnerInstitutionId?: string;
 }
 
@@ -104,4 +106,25 @@ export interface UniversityPartner {
   status: 'active' | 'pending';
   perks: string[];
   studentsEnrolled: number;
+}
+
+export interface PartnerInquiry {
+  id: string;
+  requesterUid: string;
+  institutionName: string;
+  domain: string;
+  contactName: string;
+  contactRole: string;
+  contactEmail: string;
+  estimatedSeats: number;
+  notes?: string;
+  status: 'pending' | 'approved' | 'declined';
+}
+
+export interface AiUsageInfo {
+  tier: 'guest' | 'free' | 'pro';
+  proSource: 'none' | 'stripe' | 'flutterwave' | 'campus';
+  used: number;
+  limit: number | null;
+  remaining: number | null;
 }

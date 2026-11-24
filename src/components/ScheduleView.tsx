@@ -16,15 +16,20 @@ import {
   Flame,
   ChevronRight,
   BookOpen,
+  Crown,
+  AlertCircle,
 } from 'lucide-react';
 import { ScheduleEvent, Assignment, Exam } from '../types/student';
 import { soundFx } from '../utils/soundEffects';
+import { useAppSync } from '../context/AuthAndSyncContext';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface ScheduleViewProps {
   schedule: ScheduleEvent[];
-  setSchedule: React.Dispatch<React.SetStateAction<ScheduleEvent[]>>;
+  setSchedule: (updater: React.SetStateAction<ScheduleEvent[]>) => void | Promise<void>;
   assignments: Assignment[];
   exams: Exam[];
+  onUpgrade?: () => void;
 }
 
 export const ScheduleView: React.FC<ScheduleViewProps> = ({
@@ -32,7 +37,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   setSchedule,
   assignments,
   exams,
+  onUpgrade,
 }) => {
+  const { authorizedFetch, aiUsage, setAiUsage } = useAppSync();
   // Pomodoro Timer State
   const [timerMode, setTimerMode] = useState<'focus' | 'short_break' | 'long_break'>('focus');
   const [timeLeft, setTimeLeft] = useState<number>(25 * 60);
@@ -45,6 +52,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   const [studyStyle, setStudyStyle] = useState<'balanced' | 'pomodoro' | 'deep_work' | 'sprint'>('balanced');
   const [generatedPlan, setGeneratedPlan] = useState<string>('');
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
+  const [upgradePrompt, setUpgradePrompt] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'timer' | 'ai_planner' | 'timetable'>('timer');
 
   // New Event Form State
@@ -120,6 +128,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   // Generate AI Schedule
   const handleGenerateSchedule = async () => {
     setIsAiLoading(true);
+    setUpgradePrompt(null);
     try {
       const pendingTasks = assignments
         .filter((a) => a.status === 'todo' || a.status === 'in_progress')
@@ -138,9 +147,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
         weight: e.weightPercentage,
       }));
 
-      const res = await fetch('/api/ai/schedule', {
+      const res = await authorizedFetch('/api/ai/schedule', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tasks: { assignments: pendingTasks, exams: upcomingExams },
           availableHours,
@@ -149,6 +157,17 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
       });
 
       const data = await res.json();
+      if (data.usage) {
+        setAiUsage((prev) => ({ ...prev, ...data.usage }));
+      }
+      if (res.status === 402 || data.code === 'PRO_REQUIRED') {
+        setUpgradePrompt(
+          data.error ||
+            'Daily free AI study limit reached. Upgrade to Student Pro or verify a campus email for unlimited access.'
+        );
+        return;
+      }
+
       setGeneratedPlan(data.schedule || 'Unable to generate schedule.');
     } catch (e) {
       console.error(e);
@@ -421,9 +440,16 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 mb-2">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>Smart Day Planner</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Smart Day Planner</span>
+                </div>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {aiUsage.tier === 'pro'
+                    ? 'Unlimited Pro'
+                    : `${aiUsage.remaining ?? 0}/${aiUsage.limit ?? 5} AI left today`}
+                </span>
               </div>
               <h2 className="text-base font-bold text-slate-900">
                 Optimize Today's Study Window
@@ -513,9 +539,30 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 <span>Optimized Timetable Output</span>
               </h3>
 
+              {upgradePrompt && (
+                <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2 text-xs text-amber-950">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold">Daily Free AI Quota Reached</div>
+                      <p className="text-amber-800 mt-0.5">{upgradePrompt}</p>
+                    </div>
+                  </div>
+                  {onUpgrade && (
+                    <button
+                      onClick={onUpgrade}
+                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5"
+                    >
+                      <Crown className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Unlock Unlimited Pro</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
               {generatedPlan ? (
-                <div className="prose prose-sm max-w-none text-slate-800 text-xs leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  {generatedPlan}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <MarkdownRenderer content={generatedPlan} />
                 </div>
               ) : (
                 <div className="py-20 text-center text-slate-400">

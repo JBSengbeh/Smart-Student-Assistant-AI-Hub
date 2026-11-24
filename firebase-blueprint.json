@@ -1,0 +1,291 @@
+{
+  "entities": {
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Non-PII academic student profile stored at /users/{userId}.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "level": {
+          "type": "string",
+          "enum": ["university", "high_school"]
+        },
+        "institution": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "majorOrGrade": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "term": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "targetGpa": {
+          "type": "number"
+        },
+        "currentGpa": {
+          "type": "number"
+        },
+        "streakDays": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "level", "institution", "majorOrGrade", "term", "targetGpa", "currentGpa", "streakDays", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "PII and server-signed subscription entitlement stored exclusively under /users/{userId}/private/{privateDocId}.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "planTier": {
+          "type": "string",
+          "enum": ["free", "pro"]
+        },
+        "proSource": {
+          "type": "string",
+          "enum": ["none", "stripe", "flutterwave", "campus"]
+        },
+        "entitlementToken": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "campusDomain": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "stripeSessionId": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "flutterwaveTxId": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "planTier", "proSource", "createdAt", "updatedAt"]
+    },
+    "Assignment": {
+      "title": "Assignment",
+      "description": "Student assignment or coursework task owned by a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "course": { "type": "string", "maxLength": 120 },
+        "courseCode": { "type": "string", "maxLength": 40 },
+        "color": { "type": "string", "maxLength": 30 },
+        "dueDate": { "type": "string", "maxLength": 30 },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "submitted", "graded"] },
+        "weightPercentage": { "type": "number" },
+        "estimatedHours": { "type": "number" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "rubricNotes": { "type": "string", "maxLength": 2000 },
+        "gradeReceived": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "title", "course", "courseCode", "color", "dueDate", "priority", "status", "weightPercentage", "estimatedHours", "createdAt", "updatedAt"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Upcoming exam with countdown metadata and syllabus checklist.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "course": { "type": "string", "maxLength": 120 },
+        "courseCode": { "type": "string", "maxLength": 40 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "date": { "type": "string", "maxLength": 30 },
+        "time": { "type": "string", "maxLength": 60 },
+        "location": { "type": "string", "maxLength": 150 },
+        "format": { "type": "string", "enum": ["in_person", "online", "take_home"] },
+        "weightPercentage": { "type": "number" },
+        "confidenceLevel": { "type": "number" },
+        "color": { "type": "string", "maxLength": 30 },
+        "checklist": { "type": "array" },
+        "studyNotesSummary": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "course", "courseCode", "title", "date", "time", "location", "format", "weightPercentage", "confidenceLevel", "color", "checklist", "createdAt", "updatedAt"]
+    },
+    "SavedNote": {
+      "title": "SavedNote",
+      "description": "AI-generated simplified study explanation saved to student notebook.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "course": { "type": "string", "maxLength": 120 },
+        "topic": { "type": "string", "maxLength": 200 },
+        "mode": { "type": "string", "enum": ["eli5", "analogy", "feynman", "summary", "quiz"] },
+        "explanation": { "type": "string", "maxLength": 20000 },
+        "tags": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "title", "course", "topic", "mode", "explanation", "tags", "createdAt", "updatedAt"]
+    },
+    "Scholarship": {
+      "title": "Scholarship",
+      "description": "Scholarship or grant tracked in a student's application pipeline.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "provider": { "type": "string", "maxLength": 150 },
+        "amount": { "type": "number" },
+        "deadline": { "type": "string", "maxLength": 30 },
+        "eligibilityLevel": { "type": "string", "enum": ["all", "university", "high_school"] },
+        "minGpa": { "type": "number" },
+        "status": { "type": "string", "enum": ["discovered", "drafting", "submitted", "awarded", "archived"] },
+        "category": { "type": "string", "enum": ["STEM", "Merit", "Need-Based", "Leadership", "Diversity", "General"] },
+        "requirements": { "type": "array" },
+        "essayPrompt": { "type": "string", "maxLength": 2000 },
+        "applicationUrl": { "type": "string", "maxLength": 500 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "title", "provider", "amount", "deadline", "eligibilityLevel", "status", "category", "requirements", "createdAt", "updatedAt"]
+    },
+    "ScheduleEvent": {
+      "title": "ScheduleEvent",
+      "description": "Weekly class, lab, or study block in the student timetable.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "day": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
+        "startTime": { "type": "string", "maxLength": 10 },
+        "endTime": { "type": "string", "maxLength": 10 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "course": { "type": "string", "maxLength": 60 },
+        "type": { "type": "string", "enum": ["lecture", "lab", "study", "exam", "break", "activity"] },
+        "color": { "type": "string", "maxLength": 30 },
+        "location": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "day", "startTime", "endTime", "title", "type", "color", "createdAt", "updatedAt"]
+    },
+    "UniversityPartner": {
+      "title": "UniversityPartner",
+      "description": "Active or pilot university/district institutional partner.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "domain": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "status": { "type": "string", "enum": ["active", "pending"] },
+        "perks": { "type": "array" },
+        "studentsEnrolled": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "domain", "status", "perks", "studentsEnrolled", "createdAt", "updatedAt"]
+    },
+    "PartnerInquiry": {
+      "title": "PartnerInquiry",
+      "description": "University or school district pilot partnership inquiry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "requesterUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "institutionName": { "type": "string", "minLength": 2, "maxLength": 150 },
+        "domain": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "contactName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "contactRole": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "contactEmail": { "type": "string", "minLength": 5, "maxLength": 254 },
+        "estimatedSeats": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["pending", "approved", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "requesterUid", "institutionName", "domain", "contactName", "contactRole", "contactEmail", "estimatedSeats", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Student public academic profile (no PII)."
+    },
+    "/users/{userId}/private/{privateDocId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated PII (email) and server-signed subscription entitlement."
+    },
+    "/users/{userId}/assignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/Assignment" },
+      "description": "Student assignments subcollection."
+    },
+    "/users/{userId}/exams/{examId}": {
+      "schema": { "$ref": "#/entities/Exam" },
+      "description": "Student exams subcollection."
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/SavedNote" },
+      "description": "Saved AI simplified notes subcollection."
+    },
+    "/users/{userId}/scholarships/{scholarshipId}": {
+      "schema": { "$ref": "#/entities/Scholarship" },
+      "description": "Tracked scholarships subcollection."
+    },
+    "/users/{userId}/schedule/{eventId}": {
+      "schema": { "$ref": "#/entities/ScheduleEvent" },
+      "description": "Weekly timetable events subcollection."
+    },
+    "/partnerSchools/{partnerId}": {
+      "schema": { "$ref": "#/entities/UniversityPartner" },
+      "description": "Public directory of active university and high school partners."
+    },
+    "/partnerInquiries/{inquiryId}": {
+      "schema": { "$ref": "#/entities/PartnerInquiry" },
+      "description": "B2B campus pilot requests submitted by faculty, advisors, or student reps."
+    }
+  }
+}

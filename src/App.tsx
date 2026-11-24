@@ -14,97 +14,48 @@ import { ScheduleView } from './components/ScheduleView';
 import { MonetizationView } from './components/MonetizationView';
 import { SettingsModal } from './components/SettingsModal';
 import { CommandPalette } from './components/CommandPalette';
-import {
-  StudentProfile,
-  Assignment,
-  Exam,
-  SavedNote,
-  Scholarship,
-  ScheduleEvent,
-} from './types/student';
-import {
-  INITIAL_UNIVERSITY_PROFILE,
-  INITIAL_HIGH_SCHOOL_PROFILE,
-  INITIAL_ASSIGNMENTS,
-  INITIAL_EXAMS,
-  INITIAL_SAVED_NOTES,
-  INITIAL_SCHOLARSHIPS,
-  INITIAL_SCHEDULE,
-} from './data/mockData';
+import { useAppSync } from './context/AuthAndSyncContext';
 import {
   GraduationCap,
   Sparkles,
   CheckSquare,
   FileText,
   Award,
-  Calendar,
   Building2,
   Clock,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [explainerTopic, setExplainerTopic] = useState<string>(
+    'Quantum Superposition & Wave Collapse'
+  );
 
-  // Persistence State with fallback to Initial Data
-  const [profile, setProfile] = useState<StudentProfile>(() => {
-    const saved = localStorage.getItem('ssa_profile');
-    return saved ? JSON.parse(saved) : INITIAL_UNIVERSITY_PROFILE;
-  });
-
-  const [assignments, setAssignments] = useState<Assignment[]>(() => {
-    const saved = localStorage.getItem('ssa_assignments');
-    return saved ? JSON.parse(saved) : INITIAL_ASSIGNMENTS;
-  });
-
-  const [exams, setExams] = useState<Exam[]>(() => {
-    const saved = localStorage.getItem('ssa_exams');
-    return saved ? JSON.parse(saved) : INITIAL_EXAMS;
-  });
-
-  const [savedNotes, setSavedNotes] = useState<SavedNote[]>(() => {
-    const saved = localStorage.getItem('ssa_notes');
-    return saved ? JSON.parse(saved) : INITIAL_SAVED_NOTES;
-  });
-
-  const [scholarships, setScholarships] = useState<Scholarship[]>(() => {
-    const saved = localStorage.getItem('ssa_scholarships');
-    return saved ? JSON.parse(saved) : INITIAL_SCHOLARSHIPS;
-  });
-
-  const [schedule, setSchedule] = useState<ScheduleEvent[]>(() => {
-    const saved = localStorage.getItem('ssa_schedule');
-    return saved ? JSON.parse(saved) : INITIAL_SCHEDULE;
-  });
-
-  // Active topic for AI Simplifier handoff
-  const [explainerTopic, setExplainerTopic] = useState<string>('Quantum Superposition & Wave Collapse');
-
-  // Synchronize to localStorage
-  useEffect(() => {
-    localStorage.setItem('ssa_profile', JSON.stringify(profile));
-  }, [profile]);
-
-  useEffect(() => {
-    localStorage.setItem('ssa_assignments', JSON.stringify(assignments));
-  }, [assignments]);
-
-  useEffect(() => {
-    localStorage.setItem('ssa_exams', JSON.stringify(exams));
-  }, [exams]);
-
-  useEffect(() => {
-    localStorage.setItem('ssa_notes', JSON.stringify(savedNotes));
-  }, [savedNotes]);
-
-  useEffect(() => {
-    localStorage.setItem('ssa_scholarships', JSON.stringify(scholarships));
-  }, [scholarships]);
-
-  useEffect(() => {
-    localStorage.setItem('ssa_schedule', JSON.stringify(schedule));
-  }, [schedule]);
+  const {
+    firebaseUser,
+    signInWithGoogle,
+    logout,
+    profile,
+    updateProfile,
+    assignments,
+    updateAssignments,
+    exams,
+    updateExams,
+    savedNotes,
+    updateSavedNotes,
+    scholarships,
+    updateScholarships,
+    schedule,
+    updateSchedule,
+    aiUsage,
+    resetDemoData,
+    checkoutNotice,
+    clearCheckoutNotice,
+  } = useAppSync();
 
   // Global Keyboard Shortcut for Command Palette (Cmd+K / Ctrl+K)
   useEffect(() => {
@@ -118,23 +69,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleResetData = () => {
-    localStorage.removeItem('ssa_profile');
-    localStorage.removeItem('ssa_assignments');
-    localStorage.removeItem('ssa_exams');
-    localStorage.removeItem('ssa_notes');
-    localStorage.removeItem('ssa_scholarships');
-    localStorage.removeItem('ssa_schedule');
-
-    setProfile(INITIAL_UNIVERSITY_PROFILE);
-    setAssignments(INITIAL_ASSIGNMENTS);
-    setExams(INITIAL_EXAMS);
-    setSavedNotes(INITIAL_SAVED_NOTES);
-    setScholarships(INITIAL_SCHOLARSHIPS);
-    setSchedule(INITIAL_SCHEDULE);
-  };
-
-  const handleExplainTopic = (topic: string, subject: string) => {
+  const handleExplainTopic = (topic: string) => {
     setExplainerTopic(topic);
     setCurrentTab('simplifier');
   };
@@ -146,7 +81,11 @@ export default function App() {
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
         profile={profile}
-        setProfile={setProfile}
+        setProfile={updateProfile}
+        firebaseUser={firebaseUser}
+        onSignIn={signInWithGoogle}
+        onSignOut={logout}
+        aiUsage={aiUsage}
         onOpenQuickAi={() => {
           setExplainerTopic('Quantum Superposition');
           setCurrentTab('simplifier');
@@ -155,13 +94,32 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
+      {/* Stripe Checkout Return Notice Banner */}
+      {checkoutNotice && (
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs font-semibold flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>{checkoutNotice}</span>
+            </div>
+            <button
+              onClick={clearCheckoutNotice}
+              className="p-1 rounded-lg hover:bg-indigo-100 text-indigo-700"
+              aria-label="Dismiss notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main View Router */}
       <main className="flex-1 pb-16">
         {currentTab === 'dashboard' && (
           <DashboardView
             profile={profile}
             assignments={assignments}
-            setAssignments={setAssignments}
+            setAssignments={updateAssignments}
             exams={exams}
             scholarships={scholarships}
             schedule={schedule}
@@ -175,15 +133,16 @@ export default function App() {
           <AiSimplifierView
             level={profile.level}
             savedNotes={savedNotes}
-            setSavedNotes={setSavedNotes}
+            setSavedNotes={updateSavedNotes}
             initialTopic={explainerTopic}
+            onUpgrade={() => setCurrentTab('partnerships')}
           />
         )}
 
         {currentTab === 'assignments' && (
           <AssignmentsView
             assignments={assignments}
-            setAssignments={setAssignments}
+            setAssignments={updateAssignments}
             onExplainTopic={handleExplainTopic}
           />
         )}
@@ -191,7 +150,7 @@ export default function App() {
         {currentTab === 'exams' && (
           <ExamsView
             exams={exams}
-            setExams={setExams}
+            setExams={updateExams}
             onExplainTopic={handleExplainTopic}
           />
         )}
@@ -199,22 +158,24 @@ export default function App() {
         {currentTab === 'scholarships' && (
           <ScholarshipsView
             scholarships={scholarships}
-            setScholarships={setScholarships}
+            setScholarships={updateScholarships}
             studentLevel={profile.level}
+            onUpgrade={() => setCurrentTab('partnerships')}
           />
         )}
 
         {currentTab === 'schedule' && (
           <ScheduleView
             schedule={schedule}
-            setSchedule={setSchedule}
+            setSchedule={updateSchedule}
             assignments={assignments}
             exams={exams}
+            onUpgrade={() => setCurrentTab('partnerships')}
           />
         )}
 
         {currentTab === 'partnerships' && (
-          <MonetizationView profile={profile} setProfile={setProfile} />
+          <MonetizationView profile={profile} setProfile={updateProfile} />
         )}
       </main>
 
@@ -243,7 +204,7 @@ export default function App() {
               className="hover:text-indigo-600 flex items-center gap-1 font-medium"
             >
               <Building2 className="w-3.5 h-3.5 text-indigo-500" />
-              <span>University Partnerships</span>
+              <span>Pro & Campus Access</span>
             </button>
             <span className="text-slate-400">|</span>
             <span className="text-slate-400">Built for high school & university achievers</span>
@@ -271,7 +232,9 @@ export default function App() {
                 isActive ? 'text-indigo-600 font-bold' : 'hover:text-slate-900'
               }`}
             >
-              <Icon className={`w-4 h-4 mb-0.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <Icon
+                className={`w-4 h-4 mb-0.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`}
+              />
               <span>{tab.label}</span>
             </button>
           );
@@ -295,8 +258,27 @@ export default function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         profile={profile}
-        setProfile={setProfile}
-        onResetData={handleResetData}
+        setProfile={updateProfile}
+        assignments={assignments}
+        exams={exams}
+        savedNotes={savedNotes}
+        scholarships={scholarships}
+        schedule={schedule}
+        onImportBackup={async (data) => {
+          if (data.assignments) await updateAssignments(data.assignments);
+          if (data.exams) await updateExams(data.exams);
+          if (data.notes) await updateSavedNotes(data.notes);
+          if (data.scholarships) await updateScholarships(data.scholarships);
+          if (data.schedule) await updateSchedule(data.schedule);
+          if (data.profile) {
+            await updateProfile((prev) => ({
+              ...data.profile!,
+              isPro: prev.isPro,
+              proSource: prev.proSource,
+            }));
+          }
+        }}
+        onResetData={resetDemoData}
       />
     </div>
   );

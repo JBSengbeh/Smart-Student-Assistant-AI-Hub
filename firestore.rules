@@ -1,0 +1,554 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'lapcur3@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function hasParentUser(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.uid == userId;
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+    function isValidUserPublicProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'level', 'institution', 'majorOrGrade',
+          'term', 'targetGpa', 'currentGpa', 'streakDays', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'displayName', 'level', 'institution', 'majorOrGrade',
+          'term', 'targetGpa', 'currentGpa', 'streakDays', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.uid == request.auth.uid &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.level is string && data.level in ['university', 'high_school'] &&
+        data.institution is string && data.institution.size() >= 1 && data.institution.size() <= 150 &&
+        data.majorOrGrade is string && data.majorOrGrade.size() >= 1 && data.majorOrGrade.size() <= 150 &&
+        data.term is string && data.term.size() >= 1 && data.term.size() <= 80 &&
+        data.targetGpa is number && data.targetGpa >= 0 && data.targetGpa <= 5.0 &&
+        data.currentGpa is number && data.currentGpa >= 0 && data.currentGpa <= 5.0 &&
+        data.streakDays is number && data.streakDays >= 0 && data.streakDays <= 10000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'planTier', 'proSource', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'uid', 'email', 'planTier', 'proSource', 'entitlementToken',
+          'campusDomain', 'stripeSessionId', 'flutterwaveTxId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.uid == request.auth.uid &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.planTier is string && data.planTier in ['free', 'pro'] &&
+        data.proSource is string && data.proSource in ['none', 'stripe', 'flutterwave', 'campus'] &&
+        (!('entitlementToken' in data) || (data.entitlementToken is string && data.entitlementToken.size() <= 1024)) &&
+        (!('campusDomain' in data) || (data.campusDomain is string && data.campusDomain.size() <= 120)) &&
+        (!('stripeSessionId' in data) || (data.stripeSessionId is string && data.stripeSessionId.size() <= 200)) &&
+        (!('flutterwaveTxId' in data) || (data.flutterwaveTxId is string && data.flutterwaveTxId.size() <= 120)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAssignment(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'title', 'course', 'courseCode', 'color',
+          'dueDate', 'priority', 'status', 'weightPercentage', 'estimatedHours', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'title', 'course', 'courseCode', 'color',
+          'dueDate', 'priority', 'status', 'weightPercentage', 'estimatedHours',
+          'description', 'rubricNotes', 'gradeReceived', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.course is string && data.course.size() <= 120 &&
+        data.courseCode is string && data.courseCode.size() <= 40 &&
+        data.color is string && data.color.size() <= 30 &&
+        data.dueDate is string && data.dueDate.size() <= 30 &&
+        data.priority is string && data.priority in ['low', 'medium', 'high', 'urgent'] &&
+        data.status is string && data.status in ['todo', 'in_progress', 'submitted', 'graded'] &&
+        data.weightPercentage is number && data.weightPercentage >= 0 && data.weightPercentage <= 100 &&
+        data.estimatedHours is number && data.estimatedHours >= 0 && data.estimatedHours <= 500 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+        (!('rubricNotes' in data) || (data.rubricNotes is string && data.rubricNotes.size() <= 2000)) &&
+        (!('gradeReceived' in data) || (data.gradeReceived is string && data.gradeReceived.size() <= 40)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidExam(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'course', 'courseCode', 'title', 'date', 'time',
+          'location', 'format', 'weightPercentage', 'confidenceLevel', 'color',
+          'checklist', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'course', 'courseCode', 'title', 'date', 'time',
+          'location', 'format', 'weightPercentage', 'confidenceLevel', 'color',
+          'checklist', 'studyNotesSummary', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.course is string && data.course.size() <= 120 &&
+        data.courseCode is string && data.courseCode.size() <= 40 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.date is string && data.date.size() <= 30 &&
+        data.time is string && data.time.size() <= 60 &&
+        data.location is string && data.location.size() <= 150 &&
+        data.format is string && data.format in ['in_person', 'online', 'take_home'] &&
+        data.weightPercentage is number && data.weightPercentage >= 0 && data.weightPercentage <= 100 &&
+        data.confidenceLevel is number && data.confidenceLevel >= 1 && data.confidenceLevel <= 5 &&
+        data.color is string && data.color.size() <= 30 &&
+        data.checklist is list && data.checklist.size() <= 30 &&
+        (data.checklist.size() == 0 || data.checklist[0] is map) &&
+        (!('studyNotesSummary' in data) || (data.studyNotesSummary is string && data.studyNotesSummary.size() <= 2000)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSavedNote(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'title', 'course', 'topic', 'mode',
+          'explanation', 'tags', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'title', 'course', 'topic', 'mode',
+          'explanation', 'tags', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.course is string && data.course.size() <= 120 &&
+        data.topic is string && data.topic.size() <= 200 &&
+        data.mode is string && data.mode in ['eli5', 'analogy', 'feynman', 'summary', 'quiz'] &&
+        data.explanation is string && data.explanation.size() >= 1 && data.explanation.size() <= 20000 &&
+        data.tags is list && data.tags.size() <= 10 &&
+        (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 40)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidScholarship(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'title', 'provider', 'amount', 'deadline',
+          'eligibilityLevel', 'status', 'category', 'requirements', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'title', 'provider', 'amount', 'deadline',
+          'eligibilityLevel', 'minGpa', 'status', 'category', 'requirements',
+          'essayPrompt', 'applicationUrl', 'notes', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.provider is string && data.provider.size() <= 150 &&
+        data.amount is number && data.amount >= 0 && data.amount <= 1000000 &&
+        data.deadline is string && data.deadline.size() <= 30 &&
+        data.eligibilityLevel is string && data.eligibilityLevel in ['all', 'university', 'high_school'] &&
+        (!('minGpa' in data) || (data.minGpa is number && data.minGpa >= 0 && data.minGpa <= 5.0)) &&
+        data.status is string && data.status in ['discovered', 'drafting', 'submitted', 'awarded', 'archived'] &&
+        data.category is string && data.category in ['STEM', 'Merit', 'Need-Based', 'Leadership', 'Diversity', 'General'] &&
+        data.requirements is list && data.requirements.size() <= 20 &&
+        (data.requirements.size() == 0 || (data.requirements[0] is string && data.requirements[0].size() <= 200)) &&
+        (!('essayPrompt' in data) || (data.essayPrompt is string && data.essayPrompt.size() <= 2000)) &&
+        (!('applicationUrl' in data) || (data.applicationUrl is string && data.applicationUrl.size() <= 500)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidScheduleEvent(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'day', 'startTime', 'endTime', 'title',
+          'type', 'color', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'day', 'startTime', 'endTime', 'title',
+          'course', 'type', 'color', 'location', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.day is string && data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
+        data.startTime is string && data.startTime.size() <= 10 &&
+        data.endTime is string && data.endTime.size() <= 10 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        (!('course' in data) || (data.course is string && data.course.size() <= 60)) &&
+        data.type is string && data.type in ['lecture', 'lab', 'study', 'exam', 'break', 'activity'] &&
+        data.color is string && data.color.size() <= 30 &&
+        (!('location' in data) || (data.location is string && data.location.size() <= 150)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUniversityPartner(data) {
+      return data.keys().hasAll(['id', 'name', 'domain', 'status', 'perks', 'studentsEnrolled', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'domain', 'status', 'perks', 'studentsEnrolled', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+        data.domain is string && data.domain.size() >= 3 && data.domain.size() <= 120 &&
+        data.status is string && data.status in ['active', 'pending'] &&
+        data.perks is list && data.perks.size() <= 10 &&
+        (data.perks.size() == 0 || (data.perks[0] is string && data.perks[0].size() <= 200)) &&
+        data.studentsEnrolled is number && data.studentsEnrolled >= 0 && data.studentsEnrolled <= 500000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPartnerInquiry(data) {
+      return data.keys().hasAll([
+          'id', 'requesterUid', 'institutionName', 'domain', 'contactName',
+          'contactRole', 'contactEmail', 'estimatedSeats', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'requesterUid', 'institutionName', 'domain', 'contactName',
+          'contactRole', 'contactEmail', 'estimatedSeats', 'notes', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.requesterUid) &&
+        data.institutionName is string && data.institutionName.size() >= 2 && data.institutionName.size() <= 150 &&
+        data.domain is string && data.domain.size() >= 3 && data.domain.size() <= 120 &&
+        data.contactName is string && data.contactName.size() >= 2 && data.contactName.size() <= 100 &&
+        data.contactRole is string && data.contactRole.size() >= 2 && data.contactRole.size() <= 100 &&
+        data.contactEmail is string && data.contactEmail.size() >= 5 && data.contactEmail.size() <= 254 &&
+        data.estimatedSeats is number && data.estimatedSeats >= 1 && data.estimatedSeats <= 500000 &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
+        data.status is string && data.status in ['pending', 'approved', 'declined'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 4. Admins Collection
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isVerifiedUser() && request.auth.uid == adminId;
+      allow list, create, update, delete: if false;
+    }
+
+    // 5. Users & Split Private Subcollections
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserPublicProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId) &&
+        isValidUserPublicProfile(incoming()) &&
+        (isAdmin() || (
+          isOwner(userId) &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'level', 'institution', 'majorOrGrade',
+            'term', 'targetGpa', 'currentGpa', 'streakDays', 'updatedAt'
+          ])
+        ));
+
+      allow delete: if isValidId(userId) && isAdmin();
+
+      // Isolated PII & Entitlements Subcollection
+      match /private/{privateDocId} {
+        allow get: if isValidId(userId) && isValidId(privateDocId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) && existing().uid == request.auth.uid;
+
+        allow create: if isValidId(userId) && isValidId(privateDocId) &&
+          isOwner(userId) &&
+          isValidUserPrivateInfo(incoming()) &&
+          hasParentUser(userId) &&
+          incoming().uid == userId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isValidId(userId) && isValidId(privateDocId) &&
+          isValidUserPrivateInfo(incoming()) &&
+          hasParentUser(userId) &&
+          (isAdmin() || (
+            isOwner(userId) &&
+            incoming().uid == existing().uid &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'email', 'planTier', 'proSource', 'entitlementToken',
+              'campusDomain', 'stripeSessionId', 'flutterwaveTxId', 'updatedAt'
+            ])
+          ));
+
+        allow delete: if isValidId(userId) && isValidId(privateDocId) && isAdmin();
+      }
+
+      // Assignments Subcollection
+      match /assignments/{assignmentId} {
+        allow get: if isValidId(userId) && isValidId(assignmentId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId) && isValidId(assignmentId) &&
+          isOwner(userId) &&
+          isValidAssignment(incoming()) &&
+          hasParentUser(userId) &&
+          incoming().id == assignmentId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isValidId(userId) && isValidId(assignmentId) &&
+          isValidAssignment(incoming()) &&
+          hasParentUser(userId) &&
+          (isAdmin() || (
+            isOwner(userId) &&
+            incoming().id == existing().id &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            (
+              // Action: Update Status
+              incoming().diff(existing()).affectedKeys().hasOnly(['status', 'gradeReceived', 'updatedAt']) ||
+              // Action: Full Content Edit
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'title', 'course', 'courseCode', 'color', 'dueDate', 'priority',
+                'status', 'weightPercentage', 'estimatedHours', 'description',
+                'rubricNotes', 'gradeReceived', 'updatedAt'
+              ])
+            )
+          ));
+
+        allow delete: if isValidId(userId) && isValidId(assignmentId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Exams Subcollection
+      match /exams/{examId} {
+        allow get: if isValidId(userId) && isValidId(examId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId) && isValidId(examId) &&
+          isOwner(userId) &&
+          isValidExam(incoming()) &&
+          hasParentUser(userId) &&
+          incoming().id == examId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isValidId(userId) && isValidId(examId) &&
+          isValidExam(incoming()) &&
+          hasParentUser(userId) &&
+          (isAdmin() || (
+            isOwner(userId) &&
+            incoming().id == existing().id &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            (
+              // Action: Toggle Checklist
+              incoming().diff(existing()).affectedKeys().hasOnly(['checklist', 'confidenceLevel', 'updatedAt']) ||
+              // Action: Full Exam Edit
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'course', 'courseCode', 'title', 'date', 'time', 'location',
+                'format', 'weightPercentage', 'confidenceLevel', 'color',
+                'checklist', 'studyNotesSummary', 'updatedAt'
+              ])
+            )
+          ));
+
+        allow delete: if isValidId(userId) && isValidId(examId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Saved Notes Subcollection
+      match /notes/{noteId} {
+        allow get: if isValidId(userId) && isValidId(noteId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId) && isValidId(noteId) &&
+          isOwner(userId) &&
+          isValidSavedNote(incoming()) &&
+          hasParentUser(userId) &&
+          incoming().id == noteId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isValidId(userId) && isValidId(noteId) &&
+          isValidSavedNote(incoming()) &&
+          hasParentUser(userId) &&
+          (isAdmin() || (
+            isOwner(userId) &&
+            incoming().id == existing().id &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'course', 'topic', 'mode', 'explanation', 'tags', 'updatedAt'
+            ])
+          ));
+
+        allow delete: if isValidId(userId) && isValidId(noteId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Scholarships Subcollection (Terminal State Locking on 'archived')
+      match /scholarships/{scholarshipId} {
+        allow get: if isValidId(userId) && isValidId(scholarshipId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId) && isValidId(scholarshipId) &&
+          isOwner(userId) &&
+          isValidScholarship(incoming()) &&
+          hasParentUser(userId) &&
+          incoming().id == scholarshipId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isValidId(userId) && isValidId(scholarshipId) &&
+          isValidScholarship(incoming()) &&
+          hasParentUser(userId) &&
+          (isAdmin() || (
+            isOwner(userId) &&
+            existing().status != 'archived' &&
+            incoming().id == existing().id &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            (
+              // Action: Advance Application Status
+              incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt']) ||
+              // Action: Full Scholarship Edit
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'title', 'provider', 'amount', 'deadline', 'eligibilityLevel',
+                'minGpa', 'status', 'category', 'requirements', 'essayPrompt',
+                'applicationUrl', 'notes', 'updatedAt'
+              ])
+            )
+          ));
+
+        allow delete: if isValidId(userId) && isValidId(scholarshipId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Schedule Subcollection
+      match /schedule/{eventId} {
+        allow get: if isValidId(userId) && isValidId(eventId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isValidId(userId) && isValidId(eventId) &&
+          isOwner(userId) &&
+          isValidScheduleEvent(incoming()) &&
+          hasParentUser(userId) &&
+          incoming().id == eventId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isValidId(userId) && isValidId(eventId) &&
+          isValidScheduleEvent(incoming()) &&
+          hasParentUser(userId) &&
+          (isAdmin() || (
+            isOwner(userId) &&
+            incoming().id == existing().id &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'day', 'startTime', 'endTime', 'title', 'course', 'type', 'color', 'location', 'updatedAt'
+            ])
+          ));
+
+        allow delete: if isValidId(userId) && isValidId(eventId) && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    // 6. Campus Institutional Partners (Public Directory, Admin-only Mutations)
+    match /partnerSchools/{partnerId} {
+      allow get: if isValidId(partnerId) && (existing().status == 'active' || isAdmin());
+      allow list: if existing().status in ['active', 'pending'] || isAdmin();
+
+      allow create: if isValidId(partnerId) &&
+        isAdmin() &&
+        isValidUniversityPartner(incoming()) &&
+        incoming().id == partnerId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(partnerId) &&
+        isValidUniversityPartner(incoming()) &&
+        isAdmin() &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'domain', 'status', 'perks', 'studentsEnrolled', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(partnerId) && isAdmin();
+    }
+
+    // 7. B2B Campus Pilot Inquiries (Terminal State Locking on approved/declined)
+    match /partnerInquiries/{inquiryId} {
+      allow get: if isValidId(inquiryId) && isVerifiedUser() &&
+        (existing().requesterUid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() &&
+        (existing().requesterUid == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(inquiryId) &&
+        isVerifiedUser() &&
+        isValidPartnerInquiry(incoming()) &&
+        incoming().id == inquiryId &&
+        incoming().requesterUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(inquiryId) &&
+        isValidPartnerInquiry(incoming()) &&
+        isAdmin() &&
+        incoming().id == existing().id &&
+        incoming().requesterUid == existing().requesterUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt']);
+
+      allow delete: if isValidId(inquiryId) && isAdmin();
+    }
+  }
+}

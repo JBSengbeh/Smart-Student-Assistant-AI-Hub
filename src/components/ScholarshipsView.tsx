@@ -16,21 +16,28 @@ import {
   Building,
   Target,
   Trash2,
+  Crown,
+  AlertCircle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Scholarship, ScholarshipStatus, StudentLevel } from '../types/student';
+import { useAppSync } from '../context/AuthAndSyncContext';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface ScholarshipsViewProps {
   scholarships: Scholarship[];
-  setScholarships: React.Dispatch<React.SetStateAction<Scholarship[]>>;
+  setScholarships: (updater: React.SetStateAction<Scholarship[]>) => void | Promise<void>;
   studentLevel: StudentLevel;
+  onUpgrade?: () => void;
 }
 
 export const ScholarshipsView: React.FC<ScholarshipsViewProps> = ({
   scholarships,
   setScholarships,
   studentLevel,
+  onUpgrade,
 }) => {
+  const { authorizedFetch, aiUsage, setAiUsage } = useAppSync();
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,6 +52,7 @@ export const ScholarshipsView: React.FC<ScholarshipsViewProps> = ({
   const [aiFeedback, setAiFeedback] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [copiedAi, setCopiedAi] = useState(false);
+  const [upgradePrompt, setUpgradePrompt] = useState<string | null>(null);
 
   // Form State
   const [formTitle, setFormTitle] = useState('');
@@ -102,6 +110,7 @@ export const ScholarshipsView: React.FC<ScholarshipsViewProps> = ({
   const handleOpenAiModal = (s: Scholarship) => {
     setActiveScholarshipForAi(s);
     setAiFeedback('');
+    setUpgradePrompt(null);
     setIsAiModalOpen(true);
   };
 
@@ -109,11 +118,11 @@ export const ScholarshipsView: React.FC<ScholarshipsViewProps> = ({
     if (!activeScholarshipForAi) return;
     setIsAiLoading(true);
     setCopiedAi(false);
+    setUpgradePrompt(null);
 
     try {
-      const res = await fetch('/api/ai/scholarship-essay', {
+      const res = await authorizedFetch('/api/ai/scholarship-essay', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scholarshipTitle: activeScholarshipForAi.title,
           promptTopic: activeScholarshipForAi.essayPrompt || 'Describe your leadership and academic ambitions.',
@@ -122,6 +131,17 @@ export const ScholarshipsView: React.FC<ScholarshipsViewProps> = ({
       });
 
       const data = await res.json();
+      if (data.usage) {
+        setAiUsage((prev) => ({ ...prev, ...data.usage }));
+      }
+      if (res.status === 402 || data.code === 'PRO_REQUIRED') {
+        setUpgradePrompt(
+          data.error ||
+            'Daily free AI study limit reached. Upgrade to Student Pro or verify a campus email for unlimited access.'
+        );
+        return;
+      }
+
       setAiFeedback(data.feedback || 'Unable to generate essay guide.');
     } catch (err) {
       console.error(err);
@@ -410,6 +430,38 @@ export const ScholarshipsView: React.FC<ScholarshipsViewProps> = ({
                 />
               </div>
 
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {aiUsage.tier === 'pro'
+                    ? 'Unlimited Pro AI active'
+                    : `Remaining today: ${aiUsage.remaining ?? 0}/${aiUsage.limit ?? 5} AI sessions`}
+                </span>
+              </div>
+
+              {upgradePrompt && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2 text-xs text-amber-950">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold">Daily Free AI Quota Reached</div>
+                      <p className="text-amber-800 mt-0.5">{upgradePrompt}</p>
+                    </div>
+                  </div>
+                  {onUpgrade && (
+                    <button
+                      onClick={() => {
+                        setIsAiModalOpen(false);
+                        onUpgrade();
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5"
+                    >
+                      <Crown className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Unlock Unlimited Pro</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={handleGenerateEssaySupport}
                 disabled={isAiLoading}
@@ -444,9 +496,7 @@ export const ScholarshipsView: React.FC<ScholarshipsViewProps> = ({
                       <span>{copiedAi ? 'Copied' : 'Copy Guide'}</span>
                     </button>
                   </div>
-                  <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line prose prose-sm max-w-none">
-                    {aiFeedback}
-                  </div>
+                  <MarkdownRenderer content={aiFeedback} />
                 </div>
               )}
             </div>

@@ -19,15 +19,20 @@ import {
   ChevronRight,
   GraduationCap,
   Download,
+  Crown,
+  AlertCircle,
 } from 'lucide-react';
 import { SimplifierMode, SavedNote, StudentLevel } from '../types/student';
 import { PRESET_DIFFICULT_TOPICS } from '../data/mockData';
+import { useAppSync } from '../context/AuthAndSyncContext';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface AiSimplifierViewProps {
   level: StudentLevel;
   savedNotes: SavedNote[];
-  setSavedNotes: React.Dispatch<React.SetStateAction<SavedNote[]>>;
+  setSavedNotes: (updater: React.SetStateAction<SavedNote[]>) => void | Promise<void>;
   initialTopic?: string;
+  onUpgrade?: () => void;
 }
 
 export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
@@ -35,7 +40,9 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
   savedNotes,
   setSavedNotes,
   initialTopic = '',
+  onUpgrade,
 }) => {
+  const { authorizedFetch, aiUsage, setAiUsage } = useAppSync();
   const [topicInput, setTopicInput] = useState(initialTopic || 'Quantum Superposition & Wave Collapse');
   const [subjectInput, setSubjectInput] = useState('Physics');
   const [mode, setMode] = useState<SimplifierMode>('eli5');
@@ -49,6 +56,13 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
   const [activeTab, setActiveTab] = useState<'explainer' | 'notebook'>('explainer');
   const [searchNotes, setSearchNotes] = useState('');
   const [followUpQuestion, setFollowUpQuestion] = useState('');
+  const [upgradePrompt, setUpgradePrompt] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (initialTopic) {
+      setTopicInput(initialTopic);
+    }
+  }, [initialTopic]);
 
   // Mode descriptors
   const MODES: { id: SimplifierMode; label: string; desc: string; icon: any; color: string }[] = [
@@ -99,12 +113,12 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
     setIsLoading(true);
     setCopied(false);
     setSavedSuccess(false);
+    setUpgradePrompt(null);
     stopSpeech();
 
     try {
-      const res = await fetch('/api/ai/explain', {
+      const res = await authorizedFetch('/api/ai/explain', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: targetTopic,
           subject: targetSubject,
@@ -115,6 +129,18 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
       });
 
       const data = await res.json();
+      if (data.usage) {
+        setAiUsage((prev) => ({ ...prev, ...data.usage }));
+      }
+
+      if (res.status === 402 || data.code === 'PRO_REQUIRED') {
+        setUpgradePrompt(
+          data.error ||
+            'Daily free AI study limit reached. Upgrade to Student Pro or verify a campus email for unlimited access.'
+        );
+        return;
+      }
+
       if (data.explanation) {
         setExplanation(data.explanation);
       } else {
@@ -133,11 +159,11 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
   const handleFollowUp = async () => {
     if (!followUpQuestion.trim() || !explanation) return;
     setIsLoading(true);
+    setUpgradePrompt(null);
     stopSpeech();
     try {
-      const res = await fetch('/api/ai/explain', {
+      const res = await authorizedFetch('/api/ai/explain', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: `${topicInput} - Follow-up: ${followUpQuestion}`,
           subject: subjectInput,
@@ -147,6 +173,18 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
         }),
       });
       const data = await res.json();
+      if (data.usage) {
+        setAiUsage((prev) => ({ ...prev, ...data.usage }));
+      }
+
+      if (res.status === 402 || data.code === 'PRO_REQUIRED') {
+        setUpgradePrompt(
+          data.error ||
+            'Daily free AI study limit reached. Upgrade to Student Pro or verify a campus email for unlimited access.'
+        );
+        return;
+      }
+
       if (data.explanation) {
         setExplanation(
           (prev) => `${prev}\n\n---\n\n#### 💬 Follow-Up: "${followUpQuestion}"\n${data.explanation}`
@@ -246,29 +284,42 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
             </p>
           </div>
 
-          {/* Toggle between Explainer and Notebook */}
-          <div className="flex bg-white/10 p-1 rounded-xl backdrop-blur-md border border-white/20 self-start md:self-auto">
-            <button
-              onClick={() => setActiveTab('explainer')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                activeTab === 'explainer'
-                  ? 'bg-white text-indigo-950 shadow-md'
-                  : 'text-white/80 hover:text-white'
-              }`}
-            >
-              Explainer Studio
-            </button>
-            <button
-              onClick={() => setActiveTab('notebook')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                activeTab === 'notebook'
-                  ? 'bg-white text-indigo-950 shadow-md'
-                  : 'text-white/80 hover:text-white'
-              }`}
-            >
-              <Bookmark className="w-3.5 h-3.5" />
-              <span>My Notebook ({savedNotes.length})</span>
-            </button>
+          {/* Toggle between Explainer and Notebook + Quota Badge */}
+          <div className="flex flex-col items-start md:items-end gap-2.5 self-start md:self-auto">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white/15 backdrop-blur-md border border-white/25 text-white">
+              <Crown className="w-3.5 h-3.5 text-amber-300" />
+              <span>
+                {aiUsage.tier === 'pro'
+                  ? aiUsage.proSource === 'campus'
+                    ? 'Campus Pro • Unlimited AI'
+                    : 'Student Pro • Unlimited AI'
+                  : `Remaining today: ${aiUsage.remaining ?? 0}/${aiUsage.limit ?? 5} AI sessions`}
+              </span>
+            </div>
+
+            <div className="flex bg-white/10 p-1 rounded-xl backdrop-blur-md border border-white/20">
+              <button
+                onClick={() => setActiveTab('explainer')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'explainer'
+                    ? 'bg-white text-indigo-950 shadow-md'
+                    : 'text-white/80 hover:text-white'
+                }`}
+              >
+                Explainer Studio
+              </button>
+              <button
+                onClick={() => setActiveTab('notebook')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'notebook'
+                    ? 'bg-white text-indigo-950 shadow-md'
+                    : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <Bookmark className="w-3.5 h-3.5" />
+                <span>My Notebook ({savedNotes.length})</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -326,8 +377,8 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
                       <span className="text-xs text-slate-400">{note.createdAt}</span>
                     </div>
                     <h3 className="text-base font-bold text-slate-900 mb-3">{note.title}</h3>
-                    <div className="prose prose-sm max-w-none text-slate-600 line-clamp-6 text-xs leading-relaxed whitespace-pre-line bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                      {note.explanation}
+                    <div className="max-h-36 overflow-hidden bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                      <MarkdownRenderer content={note.explanation} />
                     </div>
                   </div>
 
@@ -606,6 +657,27 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
 
               {/* Output Content Area */}
               <div className="p-6 sm:p-8 flex-1 overflow-y-auto">
+                {upgradePrompt && (
+                  <div className="mb-5 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5 text-xs text-amber-950">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold">Daily Free AI Quota Reached</div>
+                        <p className="text-amber-800 mt-0.5">{upgradePrompt}</p>
+                      </div>
+                    </div>
+                    {onUpgrade && (
+                      <button
+                        onClick={onUpgrade}
+                        className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5"
+                      >
+                        <Crown className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Unlock Unlimited Pro</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {isLoading ? (
                   <div className="h-full flex flex-col items-center justify-center py-20 text-center">
                     <div className="relative">
@@ -622,9 +694,7 @@ export const AiSimplifierView: React.FC<AiSimplifierViewProps> = ({
                     </p>
                   </div>
                 ) : explanation ? (
-                  <div className="prose prose-slate max-w-none text-slate-800 text-sm leading-relaxed space-y-4">
-                    <div className="whitespace-pre-line font-sans">{explanation}</div>
-                  </div>
+                  <MarkdownRenderer content={explanation} />
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center py-20 text-center text-slate-400">
                     <Lightbulb className="w-12 h-12 text-slate-300 mb-3" />

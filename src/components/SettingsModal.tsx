@@ -1,26 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  User,
   Settings,
   Download,
   Upload,
   RotateCcw,
   Check,
   X,
-  GraduationCap,
-  Sparkles,
-  Building2,
   AlertTriangle,
 } from 'lucide-react';
-import { StudentProfile, StudentLevel } from '../types/student';
-import { INITIAL_UNIVERSITY_PROFILE, INITIAL_HIGH_SCHOOL_PROFILE } from '../data/mockData';
+import {
+  StudentProfile,
+  StudentLevel,
+  Assignment,
+  Exam,
+  SavedNote,
+  Scholarship,
+  ScheduleEvent,
+} from '../types/student';
+
+interface BackupPayload {
+  profile?: StudentProfile;
+  assignments?: Assignment[];
+  exams?: Exam[];
+  notes?: SavedNote[];
+  scholarships?: Scholarship[];
+  schedule?: ScheduleEvent[];
+}
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: StudentProfile;
-  setProfile: React.Dispatch<React.SetStateAction<StudentProfile>>;
-  onResetData: () => void;
+  setProfile: (updater: React.SetStateAction<StudentProfile>) => void | Promise<void>;
+  assignments: Assignment[];
+  exams: Exam[];
+  savedNotes: SavedNote[];
+  scholarships: Scholarship[];
+  schedule: ScheduleEvent[];
+  onImportBackup: (data: BackupPayload) => Promise<void>;
+  onResetData: () => void | Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -28,6 +46,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   profile,
   setProfile,
+  assignments,
+  exams,
+  savedNotes,
+  scholarships,
+  schedule,
+  onImportBackup,
   onResetData,
 }) => {
   const [name, setName] = useState(profile.name);
@@ -39,12 +63,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [targetGpa, setTargetGpa] = useState(profile.targetGpa);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [importNotice, setImportNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(profile.name);
+      setLevel(profile.level);
+      setInstitution(profile.institution);
+      setMajorOrGrade(profile.majorOrGrade);
+      setTerm(profile.term);
+      setCurrentGpa(profile.currentGpa);
+      setTargetGpa(profile.targetGpa);
+      setImportNotice(null);
+    }
+  }, [isOpen, profile]);
 
   if (!isOpen) return null;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfile((prev) => ({
+    await setProfile((prev) => ({
       ...prev,
       name,
       level,
@@ -58,17 +98,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => {
       setSaveSuccess(false);
       onClose();
-    }, 1200);
+    }, 1000);
   };
 
   const handleExportData = () => {
     const backup = {
       profile,
-      assignments: JSON.parse(localStorage.getItem('ssa_assignments') || '[]'),
-      exams: JSON.parse(localStorage.getItem('ssa_exams') || '[]'),
-      notes: JSON.parse(localStorage.getItem('ssa_notes') || '[]'),
-      scholarships: JSON.parse(localStorage.getItem('ssa_scholarships') || '[]'),
-      schedule: JSON.parse(localStorage.getItem('ssa_schedule') || '[]'),
+      assignments,
+      exams,
+      notes: savedNotes,
+      scholarships,
+      schedule,
       exportedAt: new Date().toISOString(),
     };
 
@@ -86,18 +126,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data.profile) localStorage.setItem('ssa_profile', JSON.stringify(data.profile));
-        if (data.assignments) localStorage.setItem('ssa_assignments', JSON.stringify(data.assignments));
-        if (data.exams) localStorage.setItem('ssa_exams', JSON.stringify(data.exams));
-        if (data.notes) localStorage.setItem('ssa_notes', JSON.stringify(data.notes));
-        if (data.scholarships) localStorage.setItem('ssa_scholarships', JSON.stringify(data.scholarships));
-        if (data.schedule) localStorage.setItem('ssa_schedule', JSON.stringify(data.schedule));
-        window.location.reload();
-      } catch (err) {
-        alert('Invalid backup file. Please provide a valid Smart Student Assistant JSON file.');
+        const data = JSON.parse(event.target?.result as string) as BackupPayload;
+        await onImportBackup(data);
+        setImportNotice({
+          type: 'ok',
+          text: 'Backup restored successfully to your workspace.',
+        });
+      } catch {
+        setImportNotice({
+          type: 'err',
+          text: 'Invalid backup file. Please provide a valid Smart Student Assistant JSON file.',
+        });
       }
     };
     reader.readAsText(file);
@@ -113,7 +154,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">Student Profile & Settings</h2>
-              <p className="text-xs text-slate-500">Configure your academic details and manage data</p>
+              <p className="text-xs text-slate-500">
+                Configure your academic details and manage data
+              </p>
             </div>
           </div>
           <button
@@ -137,7 +180,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Academic Tier</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Academic Tier
+              </label>
               <select
                 value={level}
                 onChange={(e) => setLevel(e.target.value as StudentLevel)}
@@ -150,7 +195,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Institution / School Name</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Institution / School Name
+            </label>
             <input
               type="text"
               required
@@ -162,7 +209,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Major or Grade Level</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Major or Grade Level
+              </label>
               <input
                 type="text"
                 required
@@ -172,7 +221,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Current Academic Term</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Current Academic Term
+              </label>
               <input
                 type="text"
                 required
@@ -233,8 +284,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             Data Backup & Migration
           </h3>
           <p className="text-xs text-slate-500">
-            Export your entire academic portfolio (assignments, exams, saved notes, scholarships) to a JSON file or restore from a previous backup.
+            Export your entire academic portfolio (assignments, exams, saved notes, scholarships) to
+            a JSON file or restore from a previous backup.
           </p>
+
+          {importNotice && (
+            <div
+              className={`p-2.5 rounded-xl text-xs font-semibold border ${
+                importNotice.type === 'ok'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-rose-50 border-rose-200 text-rose-800'
+              }`}
+            >
+              {importNotice.text}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
@@ -249,12 +313,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <label className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer">
               <Upload className="w-3.5 h-3.5" />
               <span>Import Backup</span>
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportData}
-                className="hidden"
-              />
+              <input type="file" accept=".json" onChange={handleImportData} className="hidden" />
             </label>
           </div>
 
@@ -271,8 +330,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </p>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      onResetData();
+                    onClick={async () => {
+                      await onResetData();
                       setConfirmReset(false);
                       onClose();
                     }}
